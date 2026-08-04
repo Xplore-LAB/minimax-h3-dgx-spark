@@ -1,0 +1,41 @@
+services:
+  comfyui:
+    build:
+      context: .
+      args:
+        BASE_IMAGE: ${BASE_IMAGE:-nvcr.io/nvidia/pytorch:25.11-py3}
+        COMFYUI_REF: ${COMFYUI_REF:-v0.30.0}
+    image: local/minimax-h3-comfyui:${COMFYUI_REF:-v0.30.0}
+    container_name: minimax-h3-comfyui
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    gpus: all
+    ipc: host
+    shm_size: "16gb"
+    restart: unless-stopped
+    ports:
+      - "${COMFYUI_BIND:-127.0.0.1}:${COMFYUI_PORT:-8188}:8188"
+    env_file:
+      - .env
+    environment:
+      HF_HOME: /data/hf-cache
+      HUGGINGFACE_HUB_CACHE: /data/hf-cache/hub
+      HF_XET_CACHE: /data/hf-cache/xet
+      PYTORCH_ALLOC_CONF: expandable_segments:True
+      PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+      CUDA_MODULE_LOADING: LAZY
+      TOKENIZERS_PARALLELISM: "false"
+      OMP_NUM_THREADS: ${OMP_NUM_THREADS:-12}
+    volumes:
+      - ${H3_DATA_ROOT:?Set H3_DATA_ROOT in .env}/models:/opt/ComfyUI/models
+      - ${H3_DATA_ROOT}/input:/opt/ComfyUI/input
+      - ${H3_DATA_ROOT}/output:/opt/ComfyUI/output
+      - ${H3_DATA_ROOT}/temp:/opt/ComfyUI/temp
+      - ${H3_DATA_ROOT}/user:/opt/ComfyUI/user
+      - ${H3_DATA_ROOT}/custom_nodes:/opt/ComfyUI/custom_nodes
+      - ${H3_DATA_ROOT}/hf-cache:/data/hf-cache
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8188/system_stats >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 180s

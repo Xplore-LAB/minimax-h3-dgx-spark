@@ -1,0 +1,11 @@
+.env
+.env.bak
+*.bak
+diagnostics/
+*.log
+__pycache__/
+.DS_Store
+comfyui-src/
+README_部署教程.md
+docs/2026-08-04_MiniMaxH3_部署实战教程.md
+*.bak-*
