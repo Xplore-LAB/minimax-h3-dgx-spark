@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: ShellCheck
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          mapfile -t files < <(find . -name '*.sh' -not -path './.git/*')
+          if [ ${#files[@]} -gt 0 ]; then
+            shellcheck -S warning "${files[@]}"
+          else
+            echo "no shell scripts found"
+          fi
+      - name: Validate compose file
+        run: |
+          [ -f .env ] || cp -n .env.example .env || true
+          docker compose config -q
