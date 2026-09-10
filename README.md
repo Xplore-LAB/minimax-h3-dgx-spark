@@ -1,67 +1,43 @@
 <div align="center">
 
-# 🎬 MiniMax H3 on DGX Spark / GB10
+<img src="assets/icon.svg" alt="MiniMax H3 on DGX Spark" width="120" />
 
-**Run MiniMax H3 (text/video → video with sound) on a single NVIDIA DGX Spark / GB10, fully containerized**
-在单台 DGX Spark / GB10（128GB 统一内存）上跑通 MiniMax H3 文生视频 / 图生视频（**带声音**），宿主机保持干净、全部容器化。
+### 单台 DGX Spark / GB10 上容器化跑通 MiniMax H3 有声视频生成
 
-[![Docker](https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white)](docker-compose.yml)
-[![ComfyUI](https://img.shields.io/badge/ComfyUI-v0.30.0-blue)](https://github.com/comfyanonymous/ComfyUI)
-[![License: MIT](https://img.shields.io/badge/code-MIT-green.svg)](LICENSE)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)]()
+为 DGX Spark / GB10（ARM64，128GB 统一内存）用户提供一套验证过的端到端部署：ComfyUI + MiniMax H3，文生视频 / 图生视频且带声音，宿主机保持干净。
 
-**English**: A verified end-to-end deployment of [MiniMax H3](https://huggingface.co/Comfy-Org/MiniMax-H3) (FL2VA INT8 + Qwen3-VL-32B NVFP4 text encoder + video/audio VAE, ~42.5 GB weights) with ComfyUI v0.30.0 on DGX Spark/GB10 (ARM64, unified memory). Everything runs inside Docker on NGC PyTorch 25.11 — the host stays clean. Includes the full HTTP API workflow to generate your first video with sound in ~2–5 minutes, plus multi-segment film production recipes.
+[![快速开始](https://img.shields.io/badge/行动-快速开始-55e5d5?style=flat)](docs/2026-08-04_MiniMaxH3_第一条视频教程.md) [![故障排查](https://img.shields.io/badge/文档-故障排查-50a6ff?style=flat)](docs/故障排查.md) [![多段创作](https://img.shields.io/badge/教程-多段视频创作-9f86ff?style=flat)](docs/2026-08-04_MiniMaxH3_多段视频创作教程.md)
+
+[![GitHub stars](https://img.shields.io/github/stars/Xplore-LAB/minimax-h3-dgx-spark?style=flat&label=stars&color=gold)](https://github.com/Xplore-LAB/minimax-h3-dgx-spark/stargazers)
+[![license](https://img.shields.io/badge/license-MIT-1683c4?style=flat)](LICENSE)
+[![ComfyUI](https://img.shields.io/badge/ComfyUI-v0.30.0-32b643?style=flat)](https://github.com/comfyanonymous/ComfyUI)
+[![Docker](https://img.shields.io/badge/Docker-compose-7e35d5?style=flat)](docker-compose.yml)
+
+**简体中文** · [English](README.en.md)
 
 </div>
 
 ---
 
-## 方案总览
+## ⚡ 一分钟看懂 MiniMax H3 on DGX Spark
 
-```text
-DGX Spark / GB10
-├── 宿主机：DGX OS + NVIDIA 驱动 + Docker + NVIDIA Container Toolkit
-├── 容器：NGC PyTorch 25.11（torch 2.10.0a0+nv25.11）+ ComfyUI v0.30.0
-├── H3 主模型：FL2VA pruned INT8 convrot（21.0 GB）
-├── 文本编码器：Qwen3-VL-32B NVFP4 AWQ（15.7 GB）
-├── Video VAE：FP16（5.21 GB）
-└── Audio VAE：FP32（0.605 GB）—— 带声音的关键
-```
+本仓库是在单台 NVIDIA DGX Spark / GB10（Blackwell SM121，aarch64，121-128GB 统一内存）上跑通 MiniMax H3 的完整方案：模型权重约 42.5 GB，全部负载跑在 Docker 容器（NGC PyTorch 25.11 + ComfyUI v0.30.0）里，模型、输入、输出挂在外部 NVMe。
 
-**核心决策**
-- 宿主机保持干净，ComfyUI 与依赖全部容器化；模型/输入/输出挂在外部 NVMe
-- 保留 NGC 定制 torch，**不覆盖**；torchaudio 扩展必须源码编译匹配 ABI（见 §4.4）
-- 容器内任何安装必须 `docker commit` 固化进镜像，否则容器重建即丢
-
-## 环境要求
-
-| 项目 | 要求 |
+| 你想完成的事 | 交付成果 |
 |---|---|
-| 服务器 | DGX Spark / GB10（Blackwell SM121，aarch64） |
-| 内存 | 121–128 GB 统一内存 |
-| 存储 | 外部 NVMe ≥ 100GB（模型 42.5 GB + 输出空间） |
-| 软件 | Docker + NVIDIA Container Toolkit，DGX OS 6.x/7.x |
-| 网络 | HuggingFace 走 hf-mirror.com 镜像；GitHub 源码走 codeload（国内直连易断） |
+| 部署 MiniMax H3 到 DGX Spark | 容器化环境 + 4 个必需模型文件（42.5 GB，断点续传下载） |
+| 生成第一条带声音的视频 | HTTP API 全流程脚本，约 2-5 分钟出片 |
+| 制作多段拼接长视频 | 8 段 × 5 秒拼成 40 秒大片的完整配方 |
 
-## 目录结构
+## ✨ 核心能力
 
-```text
-<NVMe>/minimax-h3/                ← H3_DATA_ROOT
-├── models/{diffusion_models, text_encoders, vae}/
-├── input/                        ← 图生视频参考图
-├── output/                       ← 成片（+ audio/ 子目录）
-├── temp/  user/  custom_nodes/  hf-cache/
-```
+- **全容器化**：宿主机只装 DGX OS + 驱动 + Docker + NVIDIA Container Toolkit，ComfyUI 与依赖全部在容器内，保留 NGC 定制 torch 不覆盖
+- **有声视频**：除视频 VAE（FP16，5.21 GB）外还带 Audio VAE（FP32，0.605 GB），音画联合输出
+- **完整模型栈**：FL2VA pruned INT8 convrot 主模型（21.0 GB）+ Qwen3-VL-32B NVFP4 AWQ 文本编码器（15.7 GB）
+- **工程化脚本**：`scripts/` 提供 init_storage、preflight、download、verify_models、status、collect_diagnostics 全流程工具
+- **排障手册**：12 节故障排查文档 + 基准测试记录表 + 架构与优化说明
 
-仓库（本目录）：
-```text
-Dockerfile  docker-compose.yml  Makefile  .env.example
-docker/{entrypoint.sh, download_models.py}
-scripts/{init_storage, preflight, prepare_comfyui_src, download_fl2va, verify_models, status, collect_diagnostics}.sh
-docs/{第一条视频教程, 多段视频创作教程, 故障排查, 基准测试记录表, 架构与优化说明, 提示词模板}.md
-```
-
-## 快速开始
+## 🚀 快速开始
 
 ### 1. 准备 ComfyUI 源码（仓库不携带上游代码）
 
@@ -91,11 +67,9 @@ curl http://127.0.0.1:8188/system_stats   # 返回 200
 
 HuggingFace 断连：`.env` 加 `HF_ENDPOINT=https://hf-mirror.com`；需认证时填 `HF_TOKEN`（勿提交 git）。
 
-### 4. 编译并固化 torchaudio（关键！）
+### 4. 编译并固化 torchaudio（关键）
 
-> 为什么必须做：H3 音频 VAE 需要 `import torchaudio`，而 NGC torch（`2.10.0a0+b558c986e8.nv25.11`）
-> 与 PyPI 任何 torchaudio wheel ABI 都不匹配（报 `undefined symbol: torch_get_mutable_data_ptr`），必须源码编译。
-> NGC torch commit `b558c986e8` 缺 stable API 头文件，**改用 2025-09-13 的 commit `87ff22e49ed0` 编译成功**。
+H3 音频 VAE 需要 `import torchaudio`，而 NGC torch（`2.10.0a0+b558c986e8.nv25.11`）与 PyPI 任何 torchaudio wheel 的 ABI 都不匹配，必须源码编译。NGC torch commit `b558c986e8` 缺 stable API 头文件，改用 2025-09-13 的 commit `87ff22e49ed0` 编译成功：
 
 ```bash
 curl -L -o /tmp/torchaudio-src.tar.gz \
@@ -109,15 +83,11 @@ docker exec minimax-h3-comfyui bash -c '
 docker commit minimax-h3-comfyui local/minimax-h3-comfyui:v0.30.0-ta   # 固化！
 ```
 
-⚠️ **commit 陷阱**：commit 会连临时容器的入口命令一起固化。重建容器时检查
-`docker inspect ... --format '{{.Config.Entrypoint}}'`，若不是 `/usr/bin/tini`，
-启动时显式加 `--entrypoint /usr/bin/tini ... -- /usr/local/bin/h3-entrypoint`。
-
-## 生成你的第一条视频（HTTP API，带声音）
+### 5. 生成第一条视频（HTTP API，带声音）
 
 核心节点链：`UNETLoader(FL2VA) + CLIPLoader(Qwen3VL) + VAELoader×2(视频+音频) → MiniMaxH3SigmaShift → MiniMaxH3ImageToVideo → KSampler(20步, cfg=1.0) → VAEDecode + VAEDecodeAudio → CreateVideo/SaveVideo + SaveAudio`
 
-完整可跑脚本见 [`docs/2026-08-04_MiniMaxH3_第一条视频教程.md`](docs/2026-08-04_MiniMaxH3_第一条视频教程.md)，核心参数：
+完整可跑脚本见 [第一条视频教程](docs/2026-08-04_MiniMaxH3_第一条视频教程.md)，核心参数：
 
 | 参数 | 值 | 说明 |
 |---|---|---|
@@ -128,7 +98,7 @@ docker commit minimax-h3-comfyui local/minimax-h3-comfyui:v0.30.0-ta   # 固化�
 
 图生视频：参考图放 `<NVMe>/minimax-h3/input/`，加 `LoadImage` 节点接到 `MiniMaxH3ImageToVideo.first_frame`。
 
-## 实测性能（GB10, 2026-08-04）
+## 📊 实测性能（GB10, 2026-08-04）
 
 | 任务 | 分辨率 | 时长 | 耗时 |
 |---|---:|---:|---:|
@@ -138,23 +108,27 @@ docker commit minimax-h3-comfyui local/minimax-h3-comfyui:v0.30.0-ta   # 固化�
 | 图生（竖） | 768×1152 | 5s | 15min 22s |
 | 多段拼接 | 8×5s → 40s 大片 | — | ~50min（含合成拼接） |
 
-规律：采样约 26–47s/步，耗时 ≈ 帧数 × 分辨率；竖屏/高分辨率显著变慢。
+规律：采样约 26-47s/步，耗时 ≈ 帧数 × 分辨率；竖屏/高分辨率显著变慢。
 
-## 故障排查速查
+## 🛡️ 边界与注意
 
-| 症状 | 原因 / 处理 |
-|---|---|
-| 容器 Exited，报 `No module named 'torchaudio'` | 可写层丢失 → 重装并 `docker commit`（§4.4） |
-| `undefined symbol: torch_get_mutable_data_ptr` | PyPI wheel ABI 不匹配 → 源码编译 87ff22e49ed0 |
-| 新容器只 sleep 不启动 | commit 固化了入口 → `--entrypoint /usr/bin/tini` 覆盖 |
-| `torch.cuda.is_available()=False` | 驱动/容器工具 → `make gpu-check`，勿在容器 pip install torch |
-| 退出码 137 / 系统卡顿 | 统一内存压力 → 停其他大模型容器，降分辨率 |
-| 视频无声音 | workflow 缺音频节点 → 接 VAEDecodeAudio + SaveAudio |
-| GitHub/HF 下载断连 | 用 hf-mirror.com / codeload 镜像 |
+- 容器内任何安装必须 `docker commit` 固化进镜像，否则容器重建即丢
+- `docker commit` 会连临时容器的入口命令一起固化，重建容器时检查 `docker inspect ... --format '{{.Config.Entrypoint}}'`，若不是 `/usr/bin/tini`，启动时显式加 `--entrypoint /usr/bin/tini ... -- /usr/local/bin/h3-entrypoint`
+- 不要在容器里 pip install torch，CUDA 不可用时先 `make gpu-check` 排查驱动与容器工具
+- 退出码 137 或系统卡顿说明统一内存压力打满，停掉其他大模型容器并降低分辨率
+- 视频无声音说明 workflow 缺音频节点，需接 VAEDecodeAudio + SaveAudio
+- 服务仅通过 SSH 隧道或可信局域网访问
 
-完整 12 节排查见 [`docs/故障排查.md`](docs/故障排查.md)。
+## 📚 文档导航
 
-## 完成标准
+- [第一条视频教程](docs/2026-08-04_MiniMaxH3_第一条视频教程.md)：HTTP API 全流程脚本
+- [多段视频创作教程](docs/2026-08-04_MiniMaxH3_多段视频创作教程.md)：多段拼接长片配方
+- [故障排查](docs/故障排查.md)：12 节完整排障手册
+- [基准测试记录表](docs/基准测试记录表.md)：实测耗时记录
+- [架构与优化说明](docs/架构与优化说明.md)：方案设计细节
+- [提示词模板](docs/提示词模板.md)：视频生成提示词参考
+
+## ✅ 完成标准
 
 - [ ] `make gpu-check` 通过，8188 返回 200
 - [ ] `docker exec minimax-h3-comfyui python -c "import torchaudio"` 通过（2.8.0a0）
@@ -163,7 +137,7 @@ docker commit minimax-h3-comfyui local/minimax-h3-comfyui:v0.30.0-ta   # 固化�
 - [ ] 图生视频（照片→动态）成功
 - [ ] 服务仅通过 SSH 隧道或可信局域网访问
 
-## License
+## 📄 许可证
 
-- 本仓库代码：MIT
-- **MiniMax H3 模型：Community License（非 Apache 2.0）**——商用前请核查模型仓库 LICENSE 与所在地区限制
+- 本仓库代码：[MIT](LICENSE)
+- MiniMax H3 模型：Community License（非 Apache 2.0），商用前请核查模型仓库 LICENSE 与所在地区限制
