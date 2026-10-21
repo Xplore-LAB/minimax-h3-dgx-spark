@@ -2,6 +2,9 @@
 set -Eeuo pipefail
 source "$(dirname "$0")/common.sh"
 
+[[ -n "${H3_DATA_ROOT:-}" ]] || die "H3_DATA_ROOT is empty. Run: make init DATA_ROOT=/mnt/<4tb>/minimax-h3"
+command -v python3 >/dev/null || die "python3 is required for the model header precheck."
+
 required=(
   "models/diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors"
   "models/text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"
@@ -10,25 +13,22 @@ required=(
 )
 
 failed=0
-echo "Model verification:"
+echo "Model header/offset precheck (no hashes or tensor values checked):"
 for rel in "${required[@]}"; do
   file="${H3_DATA_ROOT}/${rel}"
-  if [[ -s "${file}" ]]; then
-    size="$(du -h "${file}" | awk "{print \$1}")"
-    printf "  OK   %-8s %s\n" "${size}" "${rel}"
-  else
-    printf "  MISS %-8s %s\n" "-" "${rel}"
+  if ! python3 "${PROJECT_DIR}/scripts/verify_safetensors.py" "${file}"; then
     failed=1
   fi
 done
 
 optional="${H3_DATA_ROOT}/models/diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors"
-if [[ -s "${optional}" ]]; then
-  size="$(du -h "${optional}" | awk "{print \$1}")"
-  printf "  OK   %-8s %s\n" "${size}" "models/diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors"
+if [[ -e "${optional}" ]]; then
+  if ! python3 "${PROJECT_DIR}/scripts/verify_safetensors.py" "${optional}"; then
+    failed=1
+  fi
 else
   echo "  INFO Ref2VA not installed (optional)."
 fi
 
 (( failed == 0 )) || exit 1
-echo "Required FL2VA files are present."
+echo "Required FL2VA files passed the header/offset precheck."

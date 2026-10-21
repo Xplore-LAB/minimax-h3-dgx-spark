@@ -91,6 +91,24 @@ curl http://127.0.0.1:8188/system_stats   # 返回 200
 
 HuggingFace 断连：`.env` 加 `HF_ENDPOINT=https://hf-mirror.com`；需认证时填 `HF_TOKEN`（勿提交 git）。
 
+模型检查分两层：`make verify-models` 在宿主机用 Python 标准库检查 safetensors
+头部、连续数据偏移及文件大小，可发现空文件、下载错误页和截断文件，不读取 tensor 数据。
+它是轻量预检，不校验 dtype 与 shape 对应的字节数。容器下载器则使用官方
+[`safetensors.safe_open`](https://huggingface.co/docs/safetensors/index)
+校验完整格式；已有文件也须通过后才跳过，下载结果通过后才原子替换目标文件。
+下载候选校验失败时会绕过缓存强制重下一次，并再次校验；仍失败则停止并保留旧目标，
+不会无限重试。候选文件与断点缓存按 Hub 实际下载状态保留，不保证坏候选原样保留。
+两层均不验证官方哈希、权重身份或
+tensor 数值；相同大小的数值损坏仍需可信校验和发现。格式依据见
+[safetensors 官方说明](https://github.com/safetensors/safetensors#format)。
+
+离线回归检查（无需模型、GPU、Docker 或真实 `.env`，下载接口使用本地替身）：
+
+```bash
+python3 -m pip install 'safetensors>=0.5,<1' 'huggingface_hub>=0.34,<2'
+python3 -m unittest discover -s tests -v
+```
+
 ### 4. 编译并固化 torchaudio（关键！）
 
 > 为什么必须做：H3 音频 VAE 需要 `import torchaudio`，而 NGC torch（`2.10.0a0+b558c986e8.nv25.11`）

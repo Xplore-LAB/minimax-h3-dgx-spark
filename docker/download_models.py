@@ -10,10 +10,10 @@ from __future__ import annotations
 import argparse
 import os
 from pathlib import Path
-import shutil
 import sys
 
 from huggingface_hub import hf_hub_download
+from safetensors import safe_open
 
 REPO_ID = "Comfy-Org/MiniMax-H3"
 MODEL_ROOT = Path("/opt/ComfyUI/models")
@@ -46,6 +46,13 @@ GROUPS = {
 }
 
 
+def validate_model(path: Path) -> None:
+    """Use the official parser without materializing any tensors in RAM/GPU."""
+    with safe_open(str(path), framework="np") as model:
+        if not model.keys():
+            raise ValueError(f"model file has no tensors: {path}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("group", choices=sorted(GROUPS))
@@ -56,31 +63,60 @@ def main() -> int:
 
     for remote_name, destination in GROUPS[args.group]:
         destination.parent.mkdir(parents=True, exist_ok=True)
-        if destination.is_file() and destination.stat().st_size > 1024 * 1024:
-            print(f"[skip] {destination.name} already exists ({destination.stat().st_size} bytes)")
-            continue
+        if destination.exists():
+            try:
+                validate_model(destination)
+            except Exception as exc:
+                print(f"[invalid] {destination.name}: {exc}; downloading a replacement")
+            else:
+                print(f"[skip] {destination.name} passed safetensors validation ({destination.stat().st_size} bytes)")
+                continue
 
         print(f"[download] {remote_name}")
-        downloaded = Path(
-            hf_hub_download(
-                repo_id=REPO_ID,
-                filename=remote_name,
-                local_dir=str(MODEL_ROOT),
-                token=token,
+        # Local Hub metadata can still mark a corrupt candidate as current.
+        # Bypass that cache once if format validation fails, then fail closed.
+        for force_download in (False, True):
+            downloaded = Path(
+                hf_hub_download(
+                    repo_id=REPO_ID,
+                    filename=remote_name,
+                    local_dir=str(MODEL_ROOT),
+                    token=token,
+                    force_download=force_download,
+                )
             )
-        )
-        if not downloaded.is_file():
-            raise FileNotFoundError(downloaded)
+            if not downloaded.is_file():
+                raise FileNotFoundError(downloaded)
+
+            # A failed check must leave the old destination intact. safe_open
+            # validates headers, shapes and data bounds without get_tensor.
+            try:
+                validate_model(downloaded)
+            except Exception as exc:
+                if force_download:
+                    raise
+                print(f"[retry] {remote_name}: {exc}; forcing one fresh download")
+            else:
+                break
 
         # Source and target are both inside the external model bind mount.
         os.replace(downloaded, destination)
         print(f"[ready] {destination} ({destination.stat().st_size} bytes)")
 
-    # Only remove the now-empty repository-style directory tree. The small
-    # local Hugging Face metadata is retained for safe resume/update behavior.
+    # Only remove empty repository-style directories; retain any partial files
+    # from an interrupted or concurrent download for resume/inspection.
     split_dir = MODEL_ROOT / "split_files"
     if split_dir.exists():
-        shutil.rmtree(split_dir, ignore_errors=True)
+        for directory in sorted(split_dir.rglob("*"), reverse=True):
+            if directory.is_dir():
+                try:
+                    directory.rmdir()
+                except OSError:
+                    pass
+        try:
+            split_dir.rmdir()
+        except OSError:
+            pass
 
     return 0
 
